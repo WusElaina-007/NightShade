@@ -1,0 +1,55 @@
+<svg width="800" height="220" viewBox="0 0 800 220" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#0d1117"/>
+      <stop offset="55%" stop-color="#141b2e"/>
+      <stop offset="100%" stop-color="#1e1b4b"/>
+    </linearGradient>
+    <linearGradient id="title" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#a78bfa"/>
+      <stop offset="50%" stop-color="#818cf8"/>
+      <stop offset="100%" stop-color="#22d3ee"/>
+    </linearGradient>
+    <linearGradient id="moon" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#e2e8f0"/>
+      <stop offset="100%" stop-color="#94a3b8"/>
+    </linearGradient>
+    <filter id="glow" x="-40%" y="-40%" width="180%" height="180%">
+      <feGaussianBlur stdDeviation="6" result="b"/>
+      <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+  </defs>
+
+  <rect x="2" y="2" width="796" height="216" rx="18" fill="url(#bg)" stroke="#30363d" stroke-width="2"/>
+
+  <!-- stars -->
+  <circle cx="70" cy="40" r="1.6" fill="#8b949e"/>
+  <circle cx="180" cy="28" r="1.2" fill="#6e7681"/>
+  <circle cx="320" cy="46" r="1.4" fill="#8b949e"/>
+  <circle cx="540" cy="30" r="1.2" fill="#6e7681"/>
+  <circle cx="690" cy="44" r="1.6" fill="#8b949e"/>
+  <circle cx="745" cy="120" r="1.2" fill="#6e7681"/>
+  <circle cx="60" cy="150" r="1.3" fill="#6e7681"/>
+
+  <!-- crescent moon -->
+  <g filter="url(#glow)">
+    <circle cx="128" cy="110" r="58" fill="url(#moon)"/>
+    <circle cx="152" cy="94" r="50" fill="#141b2e"/>
+  </g>
+  <circle cx="104" cy="88" r="4" fill="#cbd5e1"/>
+  <circle cx="94" cy="118" r="3" fill="#94a3b8"/>
+
+  <!-- title -->
+  <text x="230" y="108" font-family="Segoe UI, Helvetica, Arial, sans-serif"
+        font-size="64" font-weight="800" letter-spacing="10"
+        fill="url(#title)">NIGHTSHADE</text>
+
+  <!-- subtitle -->
+  <text x="234" y="152" font-family="Consolas, Menlo, monospace"
+        font-size="19" fill="#8b949e" letter-spacing="2">rust &#183; windows security research &#183; poison in plain sight</text>
+
+  <!-- divider + fork note -->
+  <line x1="234" y1="174" x2="740" y2="174" stroke="#30363d" stroke-width="1.5"/>
+  <text x="234" y="198" font-family="Segoe UI, Arial, sans-serif"
+        font-size="14" fill="#6e7681">hardened fork of sqlerrorthing/ShadowSniff &#183; MIT</text>
+</svg>

@@ -1,7 +1,21 @@
 <div align="center">
-    <h1>NightShade</h1>
-    <p>A hardened fork of <a href="https://github.com/sqlerrorthing/ShadowSniff">ShadowSniff</a> — lightweight Windows information-stealing research tool written in Rust.</p>
-    <p><b>PoC. For educational and authorized red-team use only.</b></p>
+    <img src=".github/images/banner.svg" alt="NightShade" width="800"/>
+</div>
+
+<div align="center">
+
+![Language](https://img.shields.io/badge/language-Rust%20nightly-DEA584?logo=rust&logoColor=white)
+![Platform](https://img.shields.io/badge/platform-Windows%2010%2F11-0078D6?logo=windows95&logoColor=white)
+![Version](https://img.shields.io/badge/version-2.2.0--nightshade-8A2BE2)
+![License](https://img.shields.io/badge/license-MIT-3FB950)
+![Stub](https://img.shields.io/badge/stub-%7E200KB--800KB-red)
+![Crypto](https://img.shields.io/badge/log--crypto-AES--256--GCM-1F6FEB)
+![Evasion](https://img.shields.io/badge/evasion-syscalls%20%2B%20ETW%20%2B%20UAC-C93A2C)
+
+**A hardened fork of [ShadowSniff](https://github.com/sqlerrorthing/ShadowSniff) — lightweight Windows information-stealing research tool written in Rust.**
+
+*PoC. For educational and authorized red-team use only.*
+
 </div>
 
 ---
@@ -123,4 +137,16 @@ Requires Rust nightly + Visual Studio C++ toolchain. `just release` applies size
 
 MIT — inherited from upstream. Original work by [sqlerrorthing](https://github.com/sqlerrorthing/ShadowSniff); this fork's hardening changes are released under the same terms.
 
-**Disclaimer:** this project is published for malware research, defence analysis and authorized red-team engagements. The authors do not condone illegal use.
+---
+
+## ⚠️ Disclaimer & Statement of Responsibility
+
+> **[EN]** NightShade is published **strictly for educational purposes, malware research, defensive analysis and authorized red-team engagements**. By cloning, building, or using any part of this project you acknowledge and agree that:
+>
+> 1. You will only deploy it against systems **you own**, or systems you have **explicit, written authorization** to test;
+> 2. Any use against third-party systems, without prior consent, is **illegal** in virtually every jurisdiction (including, but not limited to: unauthorized access to computer systems, interception of data, and theft of personal information) and is **not condoned by the authors in any way**;
+> 3. You, and only you, bear **full legal responsibility** for every action performed with this software. The authors and contributors accept **no liability whatsoever** for any damage, data loss, legal consequences, or misuse caused by this project;
+> 4. This software is provided **"AS IS", WITHOUT WARRANTY OF ANY KIND** — express or implied;
+> 5. If you do not agree with any of the above, **delete this repository immediately**.
+
+> **[VN]** NightShade chỉ được phát hành cho **mục đích học tập, nghiên cứu malware và kiểm thử an ninh có được sự cho phép bằng văn bản**. Người tải xuống/cloned/sử dụng chịu **toàn bộ trách nhiệm pháp lý** về mọi hành vi của mình; tác giả không chịu bất kỳ trách nhiệm nào về hậu quả phát sinh. Mọi hành vi sử dụng trái phép vào hệ thống của bên thứ ba là **bất hợp pháp** và hoàn toàn không được ủng hộ. Nếu không đồng ý với các điều khoản trên, hãy **xoá ngay dự án này**.
