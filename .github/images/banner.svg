@@ -46,10 +46,10 @@
 
   <!-- subtitle -->
   <text x="234" y="152" font-family="Consolas, Menlo, monospace"
-        font-size="19" fill="#8b949e" letter-spacing="2">rust &#183; windows security research &#183; poison in plain sight</text>
+        font-size="18" fill="#8b949e" letter-spacing="1.5">rust &#183; windows security research</text>
 
   <!-- divider + fork note -->
   <line x1="234" y1="174" x2="740" y2="174" stroke="#30363d" stroke-width="1.5"/>
   <text x="234" y="198" font-family="Segoe UI, Arial, sans-serif"
-        font-size="14" fill="#6e7681">hardened fork of sqlerrorthing/ShadowSniff &#183; MIT</text>
+        font-size="14" fill="#6e7681">poison in plain sight &#183; hardened fork of sqlerrorthing/ShadowSniff &#183; MIT</text>
 </svg>
