@@ -1,0 +1,12 @@
+[package]
+name = "database"
+version = "0.1.0"
+edition = "2024"
+
+[build-dependencies]
+cc = "1.2"
+
+[dependencies]
+filesystem = { path = "../filesystem" }
+obfstr = "0.4.4"
+delegate = "0.13.4"

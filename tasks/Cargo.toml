@@ -1,0 +1,10 @@
+[package]
+name = "tasks"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+obfstr = "0.4.4"
+collector = { path = "../collector" }
+filesystem = { path = "../filesystem" }
+windows-sys = { workspace = true }

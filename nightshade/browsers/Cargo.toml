@@ -1,0 +1,15 @@
+[package]
+name = "browsers"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+tasks = { path = "../../tasks" }
+utils = { path = "../../utils" }
+database = { path = "../../database" }
+json = { path = "../../json" }
+filesystem = { path = "../../filesystem" }
+collector = { path = "../../collector" }
+obfstr = "0.4.4"
+windows-sys = { workspace = true }
+derive-new = "0.7.0"

